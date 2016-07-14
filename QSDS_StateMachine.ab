@@ -30,6 +30,23 @@ HEADER
 	
 	DEFINE SWITCH_MAINTENANCE		1	
 	DEFINE SWITCH_EXPERIMENT		0
+	
+	DEFINE RELAY_OFF			0
+	DEFINE RELAY_ON				1
+	
+	DEFINE LAMP_OFF				0
+	DEFINE LAMP_ON				1
+	
+	DEFINE TRIGGER_OFF			0
+	DEFINE TRIGGER_ON			1
+	
+	DEFINE POSITION_MIN 0.0
+	DEFINE POSITION_MAX 70.0
+	
+	DEFINE SPEED_SLOW 10.0
+	DEFINE SPEED_FAST 30.0
+	
+	DEFINE DELAY_CYCLE 0.005
 
 END HEADER
 
@@ -63,7 +80,7 @@ PROGRAM
 			END IF
 			
 			' TODO: Define relay behavior
-			MOVEABS D 0 F 50
+			MOVEABS D POSITION_MIN F SPEED_FAST
 			WAIT INPOS
 			
 			IF DIN(PORT_OUT, PIN_MODE_SWITCH) == SWITCH_MAINTENANCE THEN
@@ -79,11 +96,11 @@ PROGRAM
 				trigger_prev = trigger_curr
 				trigger_curr = DIN(PORT_OUT, PIN_MODE_TRIGGER)
 				
-				IF trigger_prev == 0 && trigger_curr == 1 THEN
+				IF trigger_prev == TRIGGER_OFF && trigger_curr == TRIGGER_ON THEN
 					state_next = MAINTENANCE_ACTUATED
 					
 					' TODO: Define relay behavior
-					MOVEABS D 70 F 10
+					MOVEABS D POSITION_MAX F SPEED_SLOW
 					WAIT INPOS
 				END IF
 			END IF
@@ -93,17 +110,17 @@ PROGRAM
 				state_next = EXPERIMENT_UNACTUATED
 				
 				' TODO: Define relay behavior
-				MOVEABS D 0 F 10
+				MOVEABS D POSITION_MIN F SPEED_SLOW
 				WAIT INPOS
 			ELSE
 				trigger_prev = trigger_curr
 				trigger_curr = DIN(PORT_OUT, PIN_MODE_TRIGGER)
 				
-				IF trigger_prev == 0 && trigger_curr == 1 THEN
+				IF trigger_prev == TRIGGER_OFF && trigger_curr == TRIGGER_ON THEN
 					state_next = MAINTENANCE_UNACTUATED
 					
 					' TODO: Define relay behavior
-					MOVEABS D 0 F 10
+					MOVEABS D POSITION_MIN F SPEED_SLOW
 					WAIT INPOS
 				END IF
 			END IF
@@ -119,12 +136,13 @@ PROGRAM
 			state == INITIAL
 		END IF
 		
-		DWELL 0.005
+		DWELL DELAY_CYCLE
 		state = state_next
-
 	WEND
 	
 END PROGRAM
+
+
 
 FUNCTION error_handler()
 	state = INITIAL
