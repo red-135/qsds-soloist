@@ -50,6 +50,9 @@ HEADER
 	DEFINE DELAY_ACTUATING_BACKWARD 5.0
 	DEFINE DELAY_LAMP 8.0
 	DEFINE DELAY_CYCLE 0.005
+	
+	DEFINE PI 3.14159265359
+	DEFINE NUM_OF_CMDS 10
 
 END HEADER
 
@@ -63,6 +66,9 @@ DECLARATIONS
 	GLOBAL trigger_prev AS INTEGER = 1
 	
 	GLOBAL error_count AS INTEGER = 0
+	
+	GLOBAL formatted_string AS STRING
+	GLOBAL format_string AS STRING = "%d:\tPVT D %f , %f TIME %f\n"
 END DECLARATIONS
 
 
@@ -137,11 +143,13 @@ PROGRAM
 				
 				IF trigger_prev == TRIGGER_OFF && trigger_curr == TRIGGER_ON THEN
 					' TODO: Define relay behavior
-					MOVEABS D POSITION_MAX F POSITION_MAX/DELAY_ACTUATING_FORWARD
+					' MOVEABS D POSITION_MAX F POSITION_MAX/DELAY_ACTUATING_FORWARD
+					CALL pvt_wrapper(PFBKPROG(), POSITION_MAX, DELAY_ACTUATING_FORWARD)
 					WAIT INPOS
 					
 					' TODO: Define relay behavior
-					MOVEABS D POSITION_MIN F POSITION_MAX/DELAY_ACTUATING_BACKWARD
+					' MOVEABS D POSITION_MIN F POSITION_MAX/DELAY_ACTUATING_BACKWARD
+					CALL pvt_wrapper(PFBKPROG(), POSITION_MIN, DELAY_ACTUATING_BACKWARD)
 					WAIT INPOS
 					
 					DOUT PORT_OUT, POUT_LAMP:LAMP_ON
@@ -173,4 +181,65 @@ FUNCTION error_handler()
     END IF
 
 	LONGJMP	
+END FUNCTION
+
+
+
+FUNCTION get_x(BYVAL t AS DOUBLE, BYVAL xi AS DOUBLE, BYVAL xf AS DOUBLE, BYVAL tr AS DOUBLE) AS DOUBLE
+	get_x = (xf-xi)/2*(-1*COS(t*PI/tr)+1) + xi
+END FUNCTION
+
+FUNCTION get_v(BYVAL t AS DOUBLE, BYVAL xi AS DOUBLE, BYVAL xf AS DOUBLE, BYVAL tr AS DOUBLE) AS DOUBLE
+	get_v = (xf-xi)/2*((PI/tr)*SIN(t*PI/tr))
+END FUNCTION
+
+FUNCTION get_a(BYVAL t AS DOUBLE, BYVAL xi AS DOUBLE, BYVAL xf AS DOUBLE, BYVAL tr AS DOUBLE) AS DOUBLE
+	get_a = (xf-xi)/2*((PI/tr)^2*COS(t*PI/tr))
+END FUNCTION
+
+FUNCTION compute_pvt(BYREF x_array(NUM_OF_CMDS) AS DOUBLE, BYREF v_array(NUM_OF_CMDS) AS DOUBLE, BYREF t_array(NUM_OF_CMDS) AS DOUBLE, BYVAL xi AS DOUBLE, BYVAL xf AS DOUBLE, BYVAL tf AS DOUBLE)
+	DIM ii AS INTEGER
+	FOR ii = 0 TO NUM_OF_CMDS-1
+		t_array(ii) = ((ii+1)/NUM_OF_CMDS)*tf
+		x_array(ii) = get_x(t_array(ii), xi, xf, tf)
+		v_array(ii) = get_v(t_array(ii), xi, xf, tf)
+	NEXT ii
+END FUNCTION
+
+FUNCTION execute_pvt(BYREF x_array(NUM_OF_CMDS) AS DOUBLE, BYREF v_array(NUM_OF_CMDS) AS DOUBLE, BYREF t_array(NUM_OF_CMDS) AS DOUBLE, BYVAL xi AS DOUBLE)
+	DIM x_curr AS DOUBLE
+	DIM ii AS INTEGER
+	
+	' PRINT "Loading PVT...\n"
+	
+	PVT INIT TIME ABS
+	VELOCITY ON
+	
+	FOR ii = 0 TO NUM_OF_CMDS-1
+		IF ii == 0 THEN
+			x_curr = x_array(ii) - xi
+		ELSE
+			x_curr = x_array(ii) - x_array(ii-1)
+		END IF
+		
+		IF ii == NUM_OF_CMDS-1 THEN
+			VELOCITY OFF
+		END IF
+		
+		PVT D x_curr, v_array(ii) TIME t_array(ii)
+		
+		' FORMAT formatted_string, format_string, INTV:ii, DBLV:x_curr, DBLV:v_array(ii), DBLV:t_array(ii)
+		' PRINT formatted_string
+		
+	NEXT ii	
+	
+END FUNCTION
+
+FUNCTION pvt_wrapper(BYVAL xi AS DOUBLE, BYVAL xf AS DOUBLE, BYVAL tf AS DOUBLE)
+	DIM x_array(NUM_OF_CMDS) AS DOUBLE
+	DIM v_array(NUM_OF_CMDS) AS DOUBLE
+	DIM t_array(NUM_OF_CMDS) AS DOUBLE
+	
+	CALL compute_pvt(x_array, v_array, t_array, xi, xf, tf)
+	CALL execute_pvt(x_array, v_array, t_array, xi)
 END FUNCTION
